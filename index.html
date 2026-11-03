@@ -3,40 +3,119 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>一周健康食谱与采购清单</title>
+  <meta name="theme-color" content="#d8eee5">
+  <meta name="description" content="可爱治愈风的一周健康食谱与食材采购清单">
+  <title>元气食谱小屋｜一周健康食谱</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header>
     <div class="header-container">
-      <h1>🥦 一周健康食谱 & 采购清单</h1>
+      <h1>🥦 健康食谱 & 采购清单</h1>
       <div class="auth-box">
+        <span id="cloud-status" class="cloud-status">☁️ 正在连接云端…</span>
         <span id="role-badge" class="badge badge-viewer">👀 浏览模式</span>
-        <button id="auth-btn" onclick="toggleAuth()">解锁编辑权限</button>
+        <button id="auth-btn" onclick="toggleAuth()">管理员登录</button>
       </div>
     </div>
   </header>
 
   <main class="container">
+    <section class="welcome-card" aria-label="欢迎">
+      <div class="welcome-copy">
+        <span class="welcome-kicker">LITTLE HEALTHY HOME · 每日好好吃饭</span>
+        <h2>今天也要元气满满！</h2>
+        <p>把每一餐都变成一点点幸福 ✨</p>
+        <div class="welcome-tags">
+          <span>🥑 均衡饮食</span><span>🍓 每日计划</span><span>🧺 轻松采购</span>
+        </div>
+      </div>
+      <div class="mascot-art" aria-label="角色装饰">
+        <img class="mascot-stitch" src="assets/stitch.png" alt="史迪仔装饰图"
+             onerror="this.style.display='none'">
+        <img class="mascot-dimoo" src="assets/dimoo.png" alt="DIMOO装饰图"
+             onerror="this.style.display='none'">
+        <span class="sparkle sparkle-one">✦</span>
+        <span class="sparkle sparkle-two">✧</span>
+        <span class="mascot-hint">放上你喜欢的小伙伴 ♡</span>
+      </div>
+    </section>
+
     <!-- 采购清单模块 -->
     <section class="card">
       <div class="card-header">
-        <h2>🛒 一周食材采购清单</h2>
-        <button class="edit-only btn-sm" onclick="saveShoppingList()">💾 保存采购清单</button>
+        <h2>🛒 食材采购清单</h2>
+        <div class="btn-group">
+          <button class="edit-only btn-primary" onclick="addShoppingItem()">➕ 追加食材</button>
+          <button class="edit-only btn-success" onclick="saveData()">💾 保存全部修改</button>
+        </div>
       </div>
       <div class="shopping-grid" id="shopping-list"></div>
+    </section>
+
+    <!-- 每日打卡日历模块 -->
+    <section class="card checkin-card">
+      <div class="card-header">
+        <h2>🌷 每日打卡日历</h2>
+        <div class="checkin-legend">
+          <span><i class="legend-dot completed"></i> 已完成</span>
+          <span><i class="legend-dot pending"></i> 未完成</span>
+        </div>
+      </div>
+      <div class="checkin-summary">
+        <div class="checkin-stat"><strong id="checkin-completed">0</strong><span>本月已完成</span></div>
+        <div class="checkin-stat"><strong id="checkin-rate">0%</strong><span>本月完成率</span></div>
+        <div class="checkin-stat"><strong id="checkin-total">0</strong><span>本月总天数</span></div>
+      </div>
+      <div class="calendar-toolbar">
+        <button type="button" class="calendar-nav" onclick="changeCheckinMonth(-1)" aria-label="上个月">‹</button>
+        <h3 id="checkin-month-label"></h3>
+        <button type="button" class="calendar-nav" onclick="changeCheckinMonth(1)" aria-label="下个月">›</button>
+        <button type="button" class="calendar-today" onclick="goCheckinToday()">回到今天</button>
+      </div>
+      <div class="calendar-grid" id="checkin-calendar" aria-label="每日打卡日历"></div>
+      <p class="checkin-tip">♡ 点击日期即可切换「已完成 / 未完成」，记录会自动保存。</p>
     </section>
 
     <!-- 每日食谱模块 -->
     <section class="card">
       <div class="card-header">
         <h2>📅 每日食谱与做法</h2>
+        <div class="btn-group">
+          <button class="edit-only btn-primary" onclick="addDay()">➕ 追加新天数</button>
+          <button class="edit-only btn-success" onclick="saveData()">💾 保存全部修改</button>
+        </div>
+      </div>
+      <!-- 天数切换卡片 -->
+      <div class="tabs-wrapper">
         <div class="tabs" id="day-tabs"></div>
       </div>
-      <div id="day-content"></div>
+      <!-- 当天详情内容 -->
+      <div id="day-content" style="margin-top: 20px;"></div>
     </section>
   </main>
 
+  <!-- 管理员登录弹窗 -->
+  <div id="login-modal" class="login-modal" hidden>
+    <div class="login-backdrop" onclick="closeLoginModal()"></div>
+    <section class="login-panel" role="dialog" aria-modal="true" aria-labelledby="login-title">
+      <button class="login-close" type="button" onclick="closeLoginModal()" aria-label="关闭">×</button>
+      <div class="login-icon">🔐</div>
+      <h2 id="login-title">管理员登录</h2>
+      <p>登录后即可管理食谱、采购清单和每日打卡</p>
+      <form id="login-form">
+        <label for="admin-username">管理员用户名</label>
+        <input id="admin-username" name="username" type="text" autocomplete="username" placeholder="请输入用户名" required>
+        <label for="admin-password">登录密码</label>
+        <input id="admin-password" name="password" type="password" autocomplete="current-password" placeholder="请输入密码" required>
+        <p id="login-error" class="login-error" role="alert"></p>
+        <button id="login-submit" class="btn-primary login-submit" type="submit">登录管理后台</button>
+      </form>
+      <small>仅管理员可编辑，访客可以正常浏览。</small>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="script.js"></script>
 </body>
 </html>
