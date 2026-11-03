@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>一周健康食谱与采购清单</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="header-container">
+      <h1>🥦 一周健康食谱 & 采购清单</h1>
+      <div class="auth-box">
+        <span id="role-badge" class="badge badge-viewer">👀 浏览模式</span>
+        <button id="auth-btn" onclick="toggleAuth()">解锁编辑权限</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- 采购清单模块 -->
+    <section class="card">
+      <div class="card-header">
+        <h2>🛒 一周食材采购清单</h2>
+        <button class="edit-only btn-sm" onclick="saveShoppingList()">💾 保存采购清单</button>
+      </div>
+      <div class="shopping-grid" id="shopping-list"></div>
+    </section>
+
+    <!-- 每日食谱模块 -->
+    <section class="card">
+      <div class="card-header">
+        <h2>📅 每日食谱与做法</h2>
+        <div class="tabs" id="day-tabs"></div>
+      </div>
+      <div id="day-content"></div>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
