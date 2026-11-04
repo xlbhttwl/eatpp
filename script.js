@@ -83,250 +83,136 @@ const initialData = {
   ]
 };
 
-// ===== Supabase 云端配置 =====
-// 这两个值来自 Supabase 项目设置 -> API。浏览器只能使用 publishable/anon key，绝不能放 service_role/secret key。
-const SUPABASE_URL = "https://rppildstakwmuxxxxugr.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_hQ5JTeHhyz1aPQGiGWD4Sg_o9MOCNca";
-
-// 自定义登录用户名（可改成你自己的用户名）；邮箱是创建 Supabase Auth 用户时使用的邮箱。
-// 用户在网页输入用户名 + 密码，程序会把用户名映射到这个邮箱，再由 Supabase 验证密码。
-const ADMIN_USERNAME = "admin";
-const ADMIN_AUTH_EMAIL = "xlbhttwl@gmail.com";
-
-const supabaseClient = (window.supabase && SUPABASE_URL.startsWith("https://") && !SUPABASE_URL.includes("YOUR_") && SUPABASE_PUBLISHABLE_KEY && !SUPABASE_PUBLISHABLE_KEY.includes("YOUR_"))
-  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-      auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true }
-    })
-  : null;
-
+// CloudBase PostgreSQL 云端配置
+const CLOUDBASE_ENV_ID = "burning-marten-d8gqqyki2b983196b";
+// Publishable Key 属于可公开的客户端凭证；此版本通过匿名会话取得 anon 身份，不在代码中保存高权限密钥。
+const CLOUDBASE_PUBLISHABLE_KEY = "eyJhbGciOiJSUzI1NiIsImtpZCI6IjAzM2NjMTM4LTg2NDAtNDE1ZC04MGJjLTYyYzAxYjMzNDYyMiJ9.eyJpc3MiOiJodHRwczovL2J1cm5pbmctbWFydGVuLWQ4Z3FxeWtpMmI5ODMxOTZiLmFwLXNoYW5naGFpLnRjYi1hcGkudGVuY2VudGNsb3VkYXBpLmNvbSIsInN1YiI6ImFub24iLCJhdWQiOiJidXJuaW5nLW1hcnRlbi1kOGdxcXlraTJiOTgzMTk2YiIsImV4cCI6NDA5NzM4NTc1NCwiaWF0IjoxNzkzNzAyNTU0LCJub25jZSI6IkRDYnhibWVCUjZlY25IUmI1Ml9UVkEiLCJhdF9oYXNoIjoiRENieGJtZUJSNmVjbkhSYjUyX1RWQSIsIm5hbWUiOiJBbm9ueW1vdXMiLCJzY29wZSI6ImFub255bW91cyIsInByb2plY3RfaWQiOiJidXJuaW5nLW1hcnRlbi1kOGdxcXlraTJiOTgzMTk2YiIsIm1ldGEiOnsicGxhdGZvcm0iOiJQdWJsaXNoYWJsZUtleSJ9LCJyb2xlIjoiYW5vbiIsImlzX2Fub255bW91cyI6dHJ1ZSwiYXBwX21ldGFkYXRhIjp7InByb3ZpZGVyIjoiYW5vbnltb3VzIiwicHJvdmlkZXJzIjpbImFub255bW91cyJdfSwidXNlcl9tZXRhZGF0YSI6eyJuYW1lIjoiQW5vbnltb3VzIn0sInVzZXJfdHlwZSI6IiIsImNsaWVudF90eXBlIjoiY2xpZW50X3VzZXIiLCJpc19zeXN0ZW1fYWRtaW4iOmZhbHNlfQ.GB9YFIKuE9e8aOfWKOfsJyhg843bM8MUrDv0ywNpfp4a8QWlj8cDEBHCpFFi5Ilhnt3QyE511sgTycMuk_SsXKLhwByHOJp-iqHxRR2roAeijIQYZNLKacNPrDjab1BqEss5o-MGVXSe2NNDUy1GFy7a9ylyCSWFubUXjzclvTaxBEm_hJZl2186QUkBRXxtCqxFenpojSpKGXZ9RSJLJG8zPAXjn-qA5aT30e9jm34uK3VRxANDQ_YyRd3KSoEXOnc8hw5pW-MfgCIsgUGsC2Pton9L9cUVp13ZkeVYnyi9Hq8c35k8_hsh02U-h6iOpXeooTqvl9t1WDnxEE46gA";
+const cloudApp = cloudbase.init({
+  env: CLOUDBASE_ENV_ID,
+  accessKey: CLOUDBASE_PUBLISHABLE_KEY
+});
+const cloudAuth = cloudApp.auth;
+const cloudDb = cloudApp.rdb();
+const SITE_ROW_ID = "main";
 let isEditor = false;
-let currentUser = null;
-let appData = JSON.parse(localStorage.getItem("diet_data") || "null") || JSON.parse(JSON.stringify(initialData));
-let checkinData = JSON.parse(localStorage.getItem("diet_checkins") || "{}");
+let appData = JSON.parse(JSON.stringify(initialData));
+let checkinData = {};
 let currentDayId = appData.days.length > 0 ? appData.days[0].id : 1;
+let cloudReady = false;
+let cloudSaveTimer = null;
 let checkinMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-let cloudChannel = null;
-let lastCloudUpdatedAt = null;
-let isApplyingRemote = false;
 
-function setCloudStatus(message, state = "normal") {
-  const el = document.getElementById("cloud-status");
-  if (!el) return;
-  el.textContent = message;
-  el.dataset.state = state;
-}
+document.addEventListener("DOMContentLoaded", initCloudApp);
 
-function renderAll() {
+async function initCloudApp() {
+  try {
+    // 优先恢复已登录管理员会话；否则建立匿名访客会话。
+    const sessionResult = await cloudAuth.getSession();
+    const session = sessionResult?.data?.session || sessionResult?.session || null;
+    if (!session) await cloudAuth.signInAnonymously();
+    await loadCloudData();
+    cloudReady = true;
+    setCloudStatus("☁️ 云端已连接", true);
+  } catch (error) {
+    console.error("CloudBase 初始化失败：", error);
+    setCloudStatus("⚠️ 云端连接失败", false);
+    alert("暂时无法连接云端。请检查网络后刷新页面。\n" + (error.message || ""));
+  }
   renderShoppingList();
   renderTabs();
   renderDayContent(currentDayId);
   renderCheckinCalendar();
 }
 
-function setEditorMode(enabled, user = null) {
-  isEditor = enabled;
-  currentUser = user;
-  document.body.classList.toggle("is-editor", enabled);
-  const badge = document.getElementById("role-badge");
-  const authBtn = document.getElementById("auth-btn");
-  badge.textContent = enabled ? "✏️ 管理员模式" : "👀 浏览模式";
-  badge.className = enabled ? "badge badge-editor" : "badge badge-viewer";
-  authBtn.textContent = enabled ? "退出管理员" : "管理员登录";
-  const tip = document.querySelector(".checkin-tip");
-  if (tip) tip.textContent = enabled
-    ? "♡ 点击日期即可切换「已完成 / 未完成」，打卡会自动同步到云端。"
-    : "♡ 当前为浏览模式；管理员登录后即可进行每日打卡。";
-  renderAll();
+function setCloudStatus(message, ok) {
+  const el = document.getElementById("cloud-status");
+  if (el) { el.textContent = message; el.style.color = ok ? "#25845c" : "#b45309"; }
 }
 
-function openLoginModal() {
-  const modal = document.getElementById("login-modal");
-  document.getElementById("login-error").textContent = "";
-  modal.hidden = false;
-  setTimeout(() => document.getElementById("admin-username").focus(), 0);
-}
-function closeLoginModal() {
-  document.getElementById("login-modal").hidden = true;
+function setEditorMode(enabled) {
+  isEditor = enabled;
+  document.body.classList.toggle("is-editor", enabled);
+  const badge = document.getElementById("role-badge");
+  const button = document.getElementById("auth-btn");
+  badge.innerText = enabled ? "✏️ 管理员模式" : "👀 浏览模式";
+  badge.className = enabled ? "badge badge-editor" : "badge badge-viewer";
+  button.innerText = enabled ? "退出登录" : "管理员登录";
+  renderShoppingList(); renderTabs(); renderDayContent(currentDayId); renderCheckinCalendar();
 }
 
 async function toggleAuth() {
   if (isEditor) {
-    if (supabaseClient) await supabaseClient.auth.signOut();
+    try { await cloudAuth.signOut(); } catch (e) { console.warn(e); }
     setEditorMode(false);
-    setCloudStatus("☁️ 云端已连接");
+    try { await cloudAuth.signInAnonymously(); } catch (e) { console.warn(e); }
     return;
   }
-  if (!supabaseClient) {
-    alert("还没有配置 Supabase。请先按 SETUP.md 完成云端配置，再登录管理员账户。");
-    return;
-  }
-  openLoginModal();
-}
-
-async function verifyAdminSession(session) {
-  if (!session?.user) {
-    setEditorMode(false);
-    return false;
-  }
-  const { data, error } = await supabaseClient
-    .from("admins").select("user_id").eq("user_id", session.user.id).maybeSingle();
-  if (error || !data) {
-    await supabaseClient.auth.signOut();
-    setEditorMode(false);
-    setCloudStatus("☁️ 云端已连接 · 浏览模式");
-    return false;
-  }
-  setEditorMode(true, session.user);
-  return true;
-}
-
-async function handleLogin(event) {
-  event.preventDefault();
-  const username = document.getElementById("admin-username").value.trim();
-  const password = document.getElementById("admin-password").value;
-  const errorEl = document.getElementById("login-error");
-  const submit = document.getElementById("login-submit");
-  errorEl.textContent = "";
-
-  if (username.toLowerCase() !== ADMIN_USERNAME.toLowerCase()) {
-    errorEl.textContent = "用户名或密码不正确。";
-    return;
-  }
-  if (!ADMIN_AUTH_EMAIL || ADMIN_AUTH_EMAIL.includes("YOUR_")) {
-    errorEl.textContent = "请先在 script.js 中填写管理员邮箱配置。";
-    return;
-  }
-
-  submit.disabled = true;
-  submit.textContent = "正在验证…";
+  const username = prompt("请输入管理员用户名：");
+  if (!username) return;
+  const password = prompt("请输入管理员密码：");
+  if (password === null || !password) return;
   try {
-    const { data, error } = await supabaseClient.auth.signInWithPassword({
-      email: ADMIN_AUTH_EMAIL,
-      password
-    });
+    await cloudAuth.signInWithPassword({ username: username.trim(), password });
+    const { data, error } = await cloudDb.from("site_admins").select("user_id");
     if (error) throw error;
-    const { data: adminRow, error: adminError } = await supabaseClient
-      .from("admins").select("user_id").eq("user_id", data.user.id).maybeSingle();
-    if (adminError || !adminRow) {
-      await supabaseClient.auth.signOut();
-      throw new Error("此账号尚未获得管理员权限，请检查 Supabase 的 admins 表配置。");
+    const sessionResult = await cloudAuth.getSession();
+    const session = sessionResult?.data?.session || sessionResult?.session;
+    const uid = session?.user?.id || session?.user?.sub;
+    if (!uid || !(data || []).some(row => String(row.user_id) === String(uid))) {
+      await cloudAuth.signOut();
+      await cloudAuth.signInAnonymously();
+      throw new Error("此账号尚未获得网站管理员权限。");
     }
-    closeLoginModal();
-    document.getElementById("login-form").reset();
-    setEditorMode(true, data.user);
-    setCloudStatus("☁️ 管理员已登录");
+    setEditorMode(true);
     await loadCloudData();
+    alert("管理员登录成功！现在可以编辑并保存，其他设备会同步更新。");
   } catch (error) {
-    errorEl.textContent = error.message.includes("Invalid login credentials")
-      ? "用户名或密码不正确。" : error.message;
-  } finally {
-    submit.disabled = false;
-    submit.textContent = "登录管理后台";
+    console.error(error);
+    alert("登录失败：" + (error.message || "请检查用户名和密码。"));
   }
-}
-
-function applyCloudPayload(payload, updatedAt) {
-  if (!payload || typeof payload !== "object") return;
-  if (Array.isArray(payload.shoppingList) && Array.isArray(payload.days)) {
-    appData = { shoppingList: payload.shoppingList, days: payload.days };
-    localStorage.setItem("diet_data", JSON.stringify(appData));
-  }
-  if (payload.checkins && typeof payload.checkins === "object") {
-    checkinData = payload.checkins;
-    localStorage.setItem("diet_checkins", JSON.stringify(checkinData));
-  }
-  lastCloudUpdatedAt = updatedAt || lastCloudUpdatedAt;
-  currentDayId = appData.days.length ? appData.days[0].id : 1;
-  renderAll();
 }
 
 async function loadCloudData() {
-  if (!supabaseClient) {
-    setCloudStatus("⚠️ 尚未配置云端");
-    renderAll();
-    return;
+  const { data, error } = await cloudDb.from("site_data").select("id,content").eq("id", SITE_ROW_ID);
+  if (error) throw error;
+  if (data && data.length) {
+    const content = data[0].content || {};
+    if (content.shoppingList && content.days) appData = content;
+    checkinData = content.checkins || {};
+  } else {
+    appData = JSON.parse(JSON.stringify(initialData));
+    checkinData = {};
+    // 首次初始化由已授权管理员写入；访客只使用内置默认内容。
+    if (isEditor) await persistCloudData(false);
   }
-  setCloudStatus("☁️ 正在读取云端数据…");
-  try {
-    const { data, error } = await supabaseClient
-      .from("app_data").select("payload, updated_at").eq("id", 1).maybeSingle();
-    if (error) throw error;
-    if (data?.payload) applyCloudPayload(data.payload, data.updated_at);
-    setCloudStatus("☁️ 云端同步正常");
-  } catch (error) {
-    console.error("读取云端数据失败：", error);
-    setCloudStatus("⚠️ 云端读取失败");
-    // 保留浏览器缓存，方便暂时离线查看；此时不允许把本地缓存自动覆盖云端。
-  }
+  currentDayId = appData.days.length ? appData.days[0].id : 1;
 }
 
-async function persistCloudData() {
-  if (!supabaseClient || !isEditor) {
-    alert("请先登录管理员账户，才能保存修改。");
-    return false;
+async function persistCloudData(showMessage = true) {
+  if (!cloudReady && !isEditor) return false;
+  const content = { ...appData, checkins: checkinData };
+  const { data: rows, error: readError } = await cloudDb.from("site_data").select("id").eq("id", SITE_ROW_ID);
+  if (readError) throw readError;
+  let result;
+  if (rows && rows.length) {
+    result = await cloudDb.from("site_data").update({ content, updated_at: new Date().toISOString() }).eq("id", SITE_ROW_ID);
+  } else {
+    result = await cloudDb.from("site_data").insert({ id: SITE_ROW_ID, content, updated_at: new Date().toISOString() });
   }
-  const payload = {
-    shoppingList: appData.shoppingList,
-    days: appData.days,
-    checkins: checkinData
-  };
-  setCloudStatus("☁️ 正在保存…");
-  try {
-    const now = new Date().toISOString();
-    const { error } = await supabaseClient.from("app_data").upsert({
-      id: 1, payload, updated_at: now
-    }, { onConflict: "id" });
-    if (error) throw error;
-    localStorage.setItem("diet_data", JSON.stringify({ shoppingList: appData.shoppingList, days: appData.days }));
-    localStorage.setItem("diet_checkins", JSON.stringify(checkinData));
-    lastCloudUpdatedAt = now;
-    setCloudStatus("☁️ 已同步到云端");
-    return true;
-  } catch (error) {
-    console.error("保存云端数据失败：", error);
-    setCloudStatus("⚠️ 保存失败");
-    alert("云端保存失败：" + error.message + "\n请检查网络、Supabase 配置和管理员权限。");
-    return false;
-  }
+  if (result.error) throw result.error;
+  if (showMessage) alert("☁️ 已保存到云端，其他设备刷新后即可看到最新内容！");
+  setCloudStatus("☁️ 云端同步正常", true);
+  return true;
 }
 
-function subscribeCloudChanges() {
-  if (!supabaseClient || cloudChannel) return;
-  cloudChannel = supabaseClient.channel("public-app-data-sync")
-    .on("postgres_changes", {
-      event: "UPDATE", schema: "public", table: "app_data", filter: "id=eq.1"
-    }, (event) => {
-      const incomingAt = event.new?.updated_at;
-      if (incomingAt && lastCloudUpdatedAt && incomingAt <= lastCloudUpdatedAt) return;
-      if (isApplyingRemote) return;
-      isApplyingRemote = true;
-      applyCloudPayload(event.new?.payload, incomingAt);
-      setCloudStatus("☁️ 已收到其他设备的更新");
-      isApplyingRemote = false;
-    })
-    .subscribe((status) => {
-      if (status === "SUBSCRIBED") setCloudStatus("☁️ 云端实时同步已连接");
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setCloudStatus("⚠️ 实时同步暂不可用");
-    });
+function scheduleCloudSave() {
+  if (!isEditor) return;
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = setTimeout(async () => {
+    try { await persistCloudData(false); }
+    catch (e) { console.error(e); setCloudStatus("⚠️ 自动同步失败，请手动保存", false); }
+  }, 700);
 }
-
-// ---- 页面初始化 ----
-document.addEventListener("DOMContentLoaded", async () => {
-  document.getElementById("login-form").addEventListener("submit", handleLogin);
-  renderAll();
-  if (!supabaseClient) {
-    setCloudStatus("⚠️ 等待配置 Supabase");
-    return;
-  }
-  setCloudStatus("☁️ 正在连接云端…");
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  if (session) await verifyAdminSession(session);
-  await loadCloudData();
-  subscribeCloudChanges();
-  supabaseClient.auth.onAuthStateChange(async (_event, sessionNow) => {
-    if (!sessionNow) setEditorMode(false);
-  });
-});
 
 // ---- 🛒 采购清单功能 ----
 function renderShoppingList() {
@@ -336,28 +222,49 @@ function renderShoppingList() {
     const div = document.createElement("div");
     div.className = "item-box";
     div.innerHTML = `
-      <span class="view-only"><strong>${escapeHtml(item.name)}:</strong> ${escapeHtml(item.amount)}</span>
-      <input type="text" class="edit-only" value="${escapeAttr(item.name)}" placeholder="食材名称" onchange="appData.shoppingList[${index}].name = this.value">
-      <input type="text" class="edit-only" value="${escapeAttr(item.amount)}" placeholder="数量" onchange="appData.shoppingList[${index}].amount = this.value">
+      <span class="view-only"><strong>${item.name}:</strong> ${item.amount}</span>
+      <input type="text" class="edit-only" value="${item.name}" placeholder="食材名称" onchange="appData.shoppingList[${index}].name = this.value">
+      <input type="text" class="edit-only" value="${item.amount}" placeholder="数量" onchange="appData.shoppingList[${index}].amount = this.value">
       <button class="edit-only btn-danger" onclick="deleteShoppingItem(${index})">🗑️</button>
     `;
     container.appendChild(div);
   });
 }
-function addShoppingItem() { if (!isEditor) return; appData.shoppingList.push({ name: "新食材", amount: "适量" }); renderShoppingList(); }
-function deleteShoppingItem(index) { if (!isEditor) return; appData.shoppingList.splice(index, 1); renderShoppingList(); }
+
+function addShoppingItem() {
+  appData.shoppingList.push({ name: "新食材", amount: "适量" });
+  renderShoppingList();
+
+  scheduleCloudSave();
+}
+
+function deleteShoppingItem(index) {
+  appData.shoppingList.splice(index, 1);
+  renderShoppingList();
+
+  scheduleCloudSave();
+}
 
 // ---- 📅 动态天数功能 ----
 function renderTabs() {
   const container = document.getElementById("day-tabs");
   container.innerHTML = "";
-  if (!appData.days.length) return;
-  if (!appData.days.some(d => d.id === currentDayId)) currentDayId = appData.days[0].id;
+  
+  if (appData.days.length === 0) return;
+
+  if (!appData.days.some(d => d.id === currentDayId)) {
+    currentDayId = appData.days[0].id;
+  }
+
   appData.days.forEach(d => {
     const btn = document.createElement("button");
-    btn.className = `tab-btn ${d.id === currentDayId ? "active" : ""}`;
+    btn.className = `tab-btn ${d.id === currentDayId ? 'active' : ''}`;
     btn.innerText = d.name;
-    btn.onclick = () => { currentDayId = d.id; renderTabs(); renderDayContent(currentDayId); };
+    btn.onclick = () => {
+      currentDayId = d.id;
+      renderTabs();
+      renderDayContent(currentDayId);
+    };
     container.appendChild(btn);
   });
 }
@@ -365,113 +272,190 @@ function renderTabs() {
 function renderDayContent(dayId) {
   const container = document.getElementById("day-content");
   const dayIndex = appData.days.findIndex(d => d.id === dayId);
-  if (dayIndex === -1) { container.innerHTML = "<p>暂无食谱，请管理员登录后追加天数。</p>"; return; }
-  const dayData = appData.days[dayIndex];
-  let html = "";
-  if (isEditor) {
-    html += `<div class="day-header-edit">
-      <label>🏷️ 天数名称：</label>
-      <input type="text" value="${escapeAttr(dayData.name)}" onchange="appData.days[${dayIndex}].name = this.value; renderTabs();">
-      <button class="btn-primary btn-sm" onclick="addMeal(${dayIndex})">➕ 添加一餐</button>
-      <button class="btn-danger btn-sm" style="margin-left:auto;" onclick="deleteDay(${dayId})">🗑️ 删除整天食谱</button>
-    </div>`;
+  if (dayIndex === -1) {
+    container.innerHTML = "<p>暂无食谱，请点击追加天数。</p>";
+    return;
   }
+  const dayData = appData.days[dayIndex];
+
+  let html = "";
+  
+  // 编辑模式：修改天数名、删除整天、新增一餐
+  if (isEditor) {
+    html += `
+      <div class="day-header-edit">
+        <label>🏷️ 天数名称：</label>
+        <input type="text" value="${dayData.name}" onchange="appData.days[${dayIndex}].name = this.value; renderTabs();">
+        <button class="btn-primary btn-sm" onclick="addMeal(${dayIndex})">➕ 添加一餐</button>
+        <button class="btn-danger btn-sm" style="margin-left:auto;" onclick="deleteDay(${dayId})">🗑️ 删除整天食谱</button>
+      </div>
+    `;
+  }
+
+  // 渲染每餐
   dayData.meals.forEach((meal, mealIndex) => {
-    html += `<div class="meal-block">
-      <div class="view-only meal-title" style="font-size:1.1rem;color:var(--primary);font-weight:bold;margin-bottom:8px;">${escapeHtml(meal.type)}：${escapeHtml(meal.name)}</div>
-      <div class="edit-only meal-title-row">
-        <div style="display:flex;gap:8px;align-items:center;width:80%;">
-          <input type="text" style="width:80px;" value="${escapeAttr(meal.type)}" onchange="appData.days[${dayIndex}].meals[${mealIndex}].type = this.value">
-          <span>：</span><input type="text" style="flex:1;" value="${escapeAttr(meal.name)}" onchange="appData.days[${dayIndex}].meals[${mealIndex}].name = this.value">
+    html += `
+      <div class="meal-block">
+        <!-- 浏览模式下的标题 -->
+        <div class="view-only meal-title" style="font-size:1.1rem; color:var(--primary); font-weight:bold; margin-bottom:8px;">
+          ${meal.type}：${meal.name}
         </div>
-        <button class="btn-danger btn-sm" onclick="deleteMeal(${dayIndex}, ${mealIndex})">删除此餐</button>
+        
+        <!-- 编辑模式下的标题 -->
+        <div class="edit-only meal-title-row">
+          <div style="display:flex; gap:8px; align-items:center; width:80%;">
+            <input type="text" style="width: 80px;" value="${meal.type}" onchange="appData.days[${dayIndex}].meals[${mealIndex}].type = this.value">
+            <span>：</span>
+            <input type="text" style="flex:1;" value="${meal.name}" onchange="appData.days[${dayIndex}].meals[${mealIndex}].name = this.value">
+          </div>
+          <button class="btn-danger btn-sm" onclick="deleteMeal(${dayIndex}, ${mealIndex})">删除此餐</button>
+        </div>
+
+        <div class="section-title">🥗 食材：</div>
+        <div class="view-only">
+          <ul>${meal.ingredients.map(ing => `<li>${ing}</li>`).join("")}</ul>
+        </div>
+        <div class="edit-only" style="margin: 5px 0;">
+          ${meal.ingredients.map((ing, ingIdx) => `
+            <div class="editable-list-item">
+              <input type="text" value="${ing}" onchange="appData.days[${dayIndex}].meals[${mealIndex}].ingredients[${ingIdx}] = this.value">
+              <button class="btn-danger btn-sm" onclick="deleteIngredient(${dayIndex}, ${mealIndex}, ${ingIdx})">×</button>
+            </div>
+          `).join("")}
+          <button class="btn-primary btn-sm" style="margin-top:4px;" onclick="addIngredient(${dayIndex}, ${mealIndex})">+ 添加食材</button>
+        </div>
+
+        <div class="section-title">🍳 做法：</div>
+        <div class="view-only">
+          <ol>${meal.steps.map(step => `<li>${step}</li>`).join("")}</ol>
+        </div>
+        <div class="edit-only" style="margin: 5px 0;">
+          ${meal.steps.map((step, stepIdx) => `
+            <div class="editable-list-item">
+              <input type="text" value="${step}" onchange="appData.days[${dayIndex}].meals[${mealIndex}].steps[${stepIdx}] = this.value">
+              <button class="btn-danger btn-sm" onclick="deleteStep(${dayIndex}, ${mealIndex}, ${stepIdx})">×</button>
+            </div>
+          `).join("")}
+          <button class="btn-primary btn-sm" style="margin-top:4px;" onclick="addStep(${dayIndex}, ${mealIndex})">+ 添加步骤</button>
+        </div>
       </div>
-      <div class="section-title">🥗 食材：</div>
-      <div class="view-only"><ul>${meal.ingredients.map(ing => `<li>${escapeHtml(ing)}</li>`).join("")}</ul></div>
-      <div class="edit-only" style="margin:5px 0;">
-        ${meal.ingredients.map((ing, ingIdx) => `<div class="editable-list-item"><input type="text" value="${escapeAttr(ing)}" onchange="appData.days[${dayIndex}].meals[${mealIndex}].ingredients[${ingIdx}] = this.value"><button class="btn-danger btn-sm" onclick="deleteIngredient(${dayIndex}, ${mealIndex}, ${ingIdx})">×</button></div>`).join("")}
-        <button class="btn-primary btn-sm" style="margin-top:4px;" onclick="addIngredient(${dayIndex}, ${mealIndex})">+ 添加食材</button>
-      </div>
-      <div class="section-title">🍳 做法：</div>
-      <div class="view-only"><ol>${meal.steps.map(step => `<li>${escapeHtml(step)}</li>`).join("")}</ol></div>
-      <div class="edit-only" style="margin:5px 0;">
-        ${meal.steps.map((step, stepIdx) => `<div class="editable-list-item"><input type="text" value="${escapeAttr(step)}" onchange="appData.days[${dayIndex}].meals[${mealIndex}].steps[${stepIdx}] = this.value"><button class="btn-danger btn-sm" onclick="deleteStep(${dayIndex}, ${mealIndex}, ${stepIdx})">×</button></div>`).join("")}
-        <button class="btn-primary btn-sm" style="margin-top:4px;" onclick="addStep(${dayIndex}, ${mealIndex})">+ 添加步骤</button>
-      </div>
-    </div>`;
+    `;
   });
+
   container.innerHTML = html;
 }
 
+// 动态管理天数、餐食、食材、步骤的函数
 function addDay() {
-  if (!isEditor) return;
   const newId = Date.now();
-  appData.days.push({ id: newId, name: `第${appData.days.length + 1}天`, meals: [{ type: "早餐", name: "自定义早餐", ingredients: ["燕麦40克"], steps: ["煮熟即可"] }] });
-  currentDayId = newId; renderTabs(); renderDayContent(currentDayId);
+  const nextNum = appData.days.length + 1;
+  appData.days.push({
+    id: newId,
+    name: `第${nextNum}天`,
+    meals: [
+      { type: "早餐", name: "自定义早餐", ingredients: ["燕麦40克"], steps: ["煮熟即可"] }
+    ]
+  });
+  currentDayId = newId;
+  renderTabs();
+  renderDayContent(currentDayId);
+
+  scheduleCloudSave();
 }
+
 function deleteDay(dayId) {
-  if (!isEditor || !confirm("确定要删除这一整天的食谱吗？")) return;
-  appData.days = appData.days.filter(d => d.id !== dayId);
-  currentDayId = appData.days[0]?.id ?? 1; renderTabs(); renderDayContent(currentDayId);
-}
-function addMeal(dayIndex) { if (!isEditor) return; appData.days[dayIndex].meals.push({ type: "加餐", name: "新餐点", ingredients: ["食材"], steps: ["做法"] }); renderDayContent(currentDayId); }
-function deleteMeal(dayIndex, mealIndex) { if (!isEditor) return; appData.days[dayIndex].meals.splice(mealIndex, 1); renderDayContent(currentDayId); }
-function addIngredient(dayIndex, mealIndex) { if (!isEditor) return; appData.days[dayIndex].meals[mealIndex].ingredients.push("新食材"); renderDayContent(currentDayId); }
-function deleteIngredient(dayIndex, mealIndex, ingIdx) { if (!isEditor) return; appData.days[dayIndex].meals[mealIndex].ingredients.splice(ingIdx, 1); renderDayContent(currentDayId); }
-function addStep(dayIndex, mealIndex) { if (!isEditor) return; appData.days[dayIndex].meals[mealIndex].steps.push("新步骤"); renderDayContent(currentDayId); }
-function deleteStep(dayIndex, mealIndex, stepIdx) { if (!isEditor) return; appData.days[dayIndex].meals[mealIndex].steps.splice(stepIdx, 1); renderDayContent(currentDayId); }
+  if (confirm("确定要删除这一整天的食谱吗？")) {
+    appData.days = appData.days.filter(d => d.id !== dayId);
+    if (appData.days.length > 0) {
+      currentDayId = appData.days[0].id;
+    }
+    renderTabs();
+    renderDayContent(currentDayId);
+  }
 
+  scheduleCloudSave();
+}
+
+function addMeal(dayIndex) {
+  appData.days[dayIndex].meals.push({ type: "加餐", name: "新餐点", ingredients: ["食材"], steps: ["做法"] });
+  renderDayContent(currentDayId);
+
+  scheduleCloudSave();
+}
+
+function deleteMeal(dayIndex, mealIndex) {
+  appData.days[dayIndex].meals.splice(mealIndex, 1);
+  renderDayContent(currentDayId);
+
+  scheduleCloudSave();
+}
+
+function addIngredient(dayIndex, mealIndex) {
+  appData.days[dayIndex].meals[mealIndex].ingredients.push("新食材");
+  renderDayContent(currentDayId);
+
+  scheduleCloudSave();
+}
+
+function deleteIngredient(dayIndex, mealIndex, ingIdx) {
+  appData.days[dayIndex].meals[mealIndex].ingredients.splice(ingIdx, 1);
+  renderDayContent(currentDayId);
+
+  scheduleCloudSave();
+}
+
+function addStep(dayIndex, mealIndex) {
+  appData.days[dayIndex].meals[mealIndex].steps.push("新步骤");
+  renderDayContent(currentDayId);
+
+  scheduleCloudSave();
+}
+
+function deleteStep(dayIndex, mealIndex, stepIdx) {
+  appData.days[dayIndex].meals[mealIndex].steps.splice(stepIdx, 1);
+  renderDayContent(currentDayId);
+
+  scheduleCloudSave();
+}
+
+// 统一保存到 CloudBase
 async function saveData() {
-  if (!isEditor) { alert("请先登录管理员账户。"); return; }
-  const ok = await persistCloudData();
-  if (ok) alert("食谱、采购清单和打卡记录已保存到云端！其他设备打开网站即可同步。");
+  if (!isEditor) { alert("请先登录管理员账号。"); return; }
+  try { await persistCloudData(true); }
+  catch (error) { console.error(error); alert("云端保存失败：" + (error.message || "请检查网络后重试。")); }
 }
 
-// ---- 🌷 每日打卡日历 ----
-function dateKey(year, month, day) { return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`; }
+// 每日打卡日历：打卡状态与食谱数据一起保存在云端。
+function dateKey(year, month, day) { return `${year}-${String(month + 1).padStart(2,"0")}-${String(day).padStart(2,"0")}`; }
 function renderCheckinCalendar() {
   const calendar = document.getElementById("checkin-calendar");
   if (!calendar) return;
   const year = checkinMonth.getFullYear(), month = checkinMonth.getMonth();
-  const offset = (new Date(year, month, 1).getDay() + 6) % 7;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const today = new Date(), todayKey = dateKey(today.getFullYear(), today.getMonth(), today.getDate());
-  let completed = 0;
+  const firstDay = new Date(year, month, 1).getDay();
   document.getElementById("checkin-month-label").textContent = `${year}年${month + 1}月`;
   calendar.innerHTML = "";
-  ["周一", "周二", "周三", "周四", "周五", "周六", "周日"].forEach(day => {
-    const heading = document.createElement("div"); heading.className = "calendar-weekday"; heading.textContent = day; calendar.appendChild(heading);
-  });
-  for (let i = 0; i < offset; i++) { const blank = document.createElement("div"); blank.className = "calendar-day is-empty"; calendar.appendChild(blank); }
-  for (let day = 1; day <= daysInMonth; day++) {
-    const key = dateKey(year, month, day), isCompleted = checkinData[key] === true;
-    if (isCompleted) completed++;
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `calendar-day${isCompleted ? " is-completed" : ""}${key === todayKey ? " is-today" : ""}`;
-    button.disabled = !isEditor;
-    button.setAttribute("aria-pressed", String(isCompleted));
-    button.setAttribute("aria-label", `${year}年${month + 1}月${day}日，${isCompleted ? "已完成" : "未完成"}${isEditor ? "，点击切换状态" : ""}`);
-    button.innerHTML = `<span class="day-number">${day}</span><span class="day-status">${isCompleted ? "✓ 已完成" : "○ 未完成"}</span>`;
-    button.addEventListener("click", () => toggleCheckin(key));
-    calendar.appendChild(button);
+  ["日","一","二","三","四","五","六"].forEach(d => { const el=document.createElement("div"); el.className="calendar-weekday"; el.textContent=d; calendar.appendChild(el); });
+  for (let i=0;i<firstDay;i++){ const blank=document.createElement("div"); blank.className="calendar-blank"; calendar.appendChild(blank); }
+  let completed=0;
+  for(let day=1;day<=daysInMonth;day++){
+    const key=dateKey(year,month,day), done=checkinData[key]===true; if(done) completed++;
+    const btn=document.createElement("button"); btn.type="button"; btn.className="calendar-day"+(done?" completed":""); btn.textContent=day; btn.setAttribute("aria-label",`${day}日${done?"已完成":"未完成"}`);
+    btn.disabled=!isEditor; btn.title=isEditor?"点击切换打卡状态":"管理员登录后可打卡";
+    btn.addEventListener("click",()=>toggleCheckin(key)); calendar.appendChild(btn);
   }
-  document.getElementById("checkin-completed").textContent = completed;
-  document.getElementById("checkin-rate").textContent = `${Math.round(completed / daysInMonth * 100)}%`;
-  document.getElementById("checkin-total").textContent = daysInMonth;
+  document.getElementById("checkin-completed").textContent=completed;
+  document.getElementById("checkin-rate").textContent=`${Math.round(completed/daysInMonth*100)}%`;
+  document.getElementById("checkin-total").textContent=daysInMonth;
+  const tip=document.querySelector(".checkin-tip"); if(tip) tip.textContent=isEditor?"♡ 点击日期即可切换打卡状态，修改会自动同步到云端。":"♡ 登录管理员账号后即可进行每日打卡。";
 }
-async function toggleCheckin(key) {
-  if (!isEditor) return;
-  const previous = { ...checkinData };
-  if (checkinData[key] === true) delete checkinData[key]; else checkinData[key] = true;
-  renderCheckinCalendar();
-  const ok = await persistCloudData();
-  if (!ok) { checkinData = previous; renderCheckinCalendar(); }
-}
-function changeCheckinMonth(offset) { checkinMonth = new Date(checkinMonth.getFullYear(), checkinMonth.getMonth() + offset, 1); renderCheckinCalendar(); }
-function goCheckinToday() { const today = new Date(); checkinMonth = new Date(today.getFullYear(), today.getMonth(), 1); renderCheckinCalendar(); }
+async function toggleCheckin(key){ if(!isEditor)return; if(checkinData[key]) delete checkinData[key]; else checkinData[key]=true; renderCheckinCalendar(); scheduleCloudSave(); }
+function changeCheckinMonth(offset){ checkinMonth=new Date(checkinMonth.getFullYear(),checkinMonth.getMonth()+offset,1); renderCheckinCalendar(); }
+function goCheckinToday(){ const now=new Date(); checkinMonth=new Date(now.getFullYear(),now.getMonth(),1); renderCheckinCalendar(); }
 
-function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
-}
-function escapeAttr(value) { return escapeHtml(value); }
+// 编辑操作在交互完成后自动排队同步；仍可使用“保存全部修改”立即保存。
+document.addEventListener("change", (event) => {
+  if (isEditor && event.target.matches("input, textarea, select")) scheduleCloudSave();
+});
+const _renderShoppingList = renderShoppingList;
+const _renderTabs = renderTabs;

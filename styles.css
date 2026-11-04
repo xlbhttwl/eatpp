@@ -459,64 +459,19 @@ button:focus-visible, input:focus-visible {
 }
 
 
-/* ===== 每日打卡日历 ===== */
-.checkin-card { overflow: hidden; }
-.checkin-legend { display:flex; flex-wrap:wrap; gap:14px; color:#82938a; font-size:.84rem; }
-.checkin-legend span { display:flex; align-items:center; gap:6px; }
-.legend-dot { width:9px; height:9px; border-radius:50%; display:inline-block; }
-.legend-dot.completed { background:#78b596; }
-.legend-dot.pending { background:#e7cbd3; }
-.checkin-summary { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:4px 0 22px; }
-.checkin-stat { display:flex; flex-direction:column; align-items:center; gap:3px; padding:13px 8px; border-radius:15px; background:linear-gradient(135deg,#f0f7ef,#fff4f2); }
-.checkin-stat strong { color:#628f75; font-size:1.45rem; line-height:1.3; }
-.checkin-stat span { color:#89958e; font-size:.78rem; }
-.calendar-toolbar { display:flex; align-items:center; justify-content:center; gap:14px; margin:8px 0 15px; }
-.calendar-toolbar h3 { min-width:130px; text-align:center; margin:0; color:#628f75; font-size:1.05rem; }
-.calendar-nav { width:34px; height:34px; padding:0; border-radius:50%; background:#edf5ee; color:#628f75; font-size:1.35rem; line-height:1; box-shadow:none; }
-.calendar-today { padding:7px 12px; background:#f7e9ed; color:#a87584; font-size:.78rem; box-shadow:none; }
+.cloud-status { font-size: .82rem; color: #25845c; white-space: nowrap; }
+.checkin-summary { display:flex; gap:14px; flex-wrap:wrap; margin:14px 0; }
+.checkin-stat { flex:1; min-width:90px; padding:12px; border-radius:14px; background:#f2faf6; display:flex; flex-direction:column; align-items:center; gap:4px; }
+.checkin-stat strong { font-size:1.35rem; color:var(--primary); }
+.checkin-stat span { font-size:.82rem; color:#718078; }
+.calendar-toolbar { display:flex; align-items:center; justify-content:center; gap:12px; margin:14px 0; flex-wrap:wrap; }
+.calendar-toolbar h3 { margin:0 8px; }
+.calendar-nav,.calendar-today { border:1px solid #d6e8df; border-radius:10px; background:#fff; padding:7px 13px; color:#39745a; cursor:pointer; }
 .calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:7px; }
-.calendar-weekday { text-align:center; padding:7px 0; color:#9aa79e; font-size:.78rem; font-weight:700; }
-.calendar-day { min-width:0; min-height:70px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; padding:7px 2px; border:1px solid #edf0e9; border-radius:13px; background:#fffefa; color:#66736b; box-shadow:none; transition:background .18s,border-color .18s,transform .18s; }
-.calendar-day:hover { transform:translateY(-2px); }
-.calendar-day .day-number { font-size:.95rem; font-weight:700; }
-.calendar-day .day-status { font-size:.65rem; color:#a2aaa3; }
-.calendar-day.is-completed { background:#eaf5ec; border-color:#b9d9c2; color:#548568; }
-.calendar-day.is-completed .day-status { color:#629777; }
-.calendar-day.is-today { outline:2px solid #e8c4cf; outline-offset:1px; }
-.calendar-day.is-empty { visibility:hidden; pointer-events:none; }
-.checkin-tip { margin:14px 0 0; text-align:center; color:#9aa49d; font-size:.78rem; }
-@media(max-width:680px) {
-  .checkin-summary { gap:7px; }
-  .checkin-stat { padding:10px 4px; }
-  .checkin-stat strong { font-size:1.25rem; }
-  .calendar-toolbar { gap:8px; }
-  .calendar-toolbar h3 { min-width:112px; font-size:.95rem; }
-  .calendar-grid { gap:4px; }
-  .calendar-day { min-height:57px; border-radius:10px; }
-  .calendar-day .day-number { font-size:.88rem; }
-  .calendar-day .day-status { font-size:.58rem; }
-}
-
-
-/* ===== 云端同步与管理员登录 ===== */
-.cloud-status { color: #82938a; font-size: .75rem; white-space: nowrap; }
-.login-modal[hidden] { display: none; }
-.login-modal { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 18px; }
-.login-backdrop { position: absolute; inset: 0; background: rgba(42, 58, 48, .42); backdrop-filter: blur(4px); }
-.login-panel { position: relative; z-index: 1; width: min(100%, 390px); padding: 30px 26px 25px; border: 1px solid #e8eee7; border-radius: 24px; background: #fffefa; box-shadow: 0 18px 60px rgba(40, 65, 48, .2); }
-.login-panel h2 { margin: 5px 0 4px; color: #628f75; text-align: center; }
-.login-panel > p { margin: 0 0 20px; color: #89958e; text-align: center; font-size: .88rem; }
-.login-icon { text-align: center; font-size: 2rem; }
-.login-panel label { display: block; margin: 12px 0 6px; color: #64776a; font-size: .88rem; font-weight: 700; }
-.login-panel input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #dfe9e0; border-radius: 10px; background: #fff; color: #46534d; font: inherit; }
-.login-submit { width: 100%; margin-top: 12px; }
-.login-close { position: absolute; top: 10px; right: 12px; padding: 3px 10px; background: transparent; color: #89958e; font-size: 1.5rem; box-shadow: none; }
-.login-error { min-height: 20px; margin: 8px 0 0; color: #bd666d; font-size: .82rem; }
-.login-panel small { display: block; margin-top: 15px; color: #9aa69e; text-align: center; }
-.calendar-day:disabled { cursor: default; opacity: .82; }
-.checkin-tip { color: #89958e; }
-@media (max-width: 680px) {
-  .cloud-status { white-space: normal; }
-  .auth-box { flex-wrap: wrap; }
-  .login-panel { padding: 27px 20px 22px; }
-}
+.calendar-weekday,.calendar-blank,.calendar-day { min-height:38px; display:flex; align-items:center; justify-content:center; }
+.calendar-weekday { color:#789084; font-size:.86rem; font-weight:600; }
+.calendar-day { border:1px solid #e0ece5; border-radius:10px; background:#fff; color:#53675c; cursor:pointer; }
+.calendar-day.completed { background:#d9f2e4; border-color:#9ed8b7; color:#23794b; font-weight:700; }
+.calendar-day:disabled { cursor:default; opacity:1; }
+.checkin-tip { color:#819087; font-size:.88rem; text-align:center; margin-top:12px; }
+@media(max-width:560px){ .cloud-status{font-size:.72rem;} .auth-box{flex-wrap:wrap;} .calendar-grid{gap:4px;} .calendar-day{min-height:34px;} }
